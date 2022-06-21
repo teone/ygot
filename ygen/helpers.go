@@ -14,7 +14,12 @@
 
 package ygen
 
-import "github.com/openconfig/goyang/pkg/yang"
+import (
+	"fmt"
+	"github.com/openconfig/goyang/pkg/yang"
+	"github.com/openconfig/ygot/util"
+	"strings"
+)
 
 // resolveRootName resolves the name of the fakeroot by taking configuration
 // and the default values, along with a boolean indicating whether the fake
@@ -46,4 +51,71 @@ type resolveTypeArgs struct {
 	// context of the yang.Entry is required such that the leaf's context
 	// can be established.
 	contextEntry *yang.Entry
+}
+
+// given yang.Entry of type yang.Yleafref traverse the tree
+// to find the entry in the appropriate place
+func findLeafRef(entry *yang.Entry) (*yang.Entry, error) {
+
+	if entry.Type.Kind != yang.Yleafref {
+		return nil, fmt.Errorf("entry %s is not a leafref", entry.Name)
+	}
+
+	path := entry.Type.Path
+
+	if len(strings.Split(path, "/")) < 2 {
+		return nil, fmt.Errorf("key %s had an invalid path %s", entry.Name, entry.Path())
+	}
+
+	var dp []string // downward path
+	var curEntry = entry
+
+	// if the path is absolute (eg: /t1:cont1a/t1:list2a/t1:name) go back to the root and then descend
+	if path[0:1] == "/" {
+		dp = strings.Split(path[1:], "/")
+
+		// go back till the root
+		for {
+			if curEntry.Parent != nil {
+				curEntry = curEntry.Parent
+			} else {
+				break
+			}
+		}
+	} else {
+		// identify how many levels we have to go up the tree
+		lb := strings.Count(path, "../")
+
+		// identify the path to take once we have gone up the tree
+		dp = strings.Split(strings.ReplaceAll(path, "../", ""), "/")
+
+		// this is the entry we are moving to
+
+		for i := 0; i < lb; i++ {
+			// we're going up the tree till it's needed
+
+			if curEntry.Parent == nil {
+				return nil, fmt.Errorf("entry %s does not have a parent", curEntry.Name)
+			}
+
+			curEntry = curEntry.Parent
+		}
+	}
+
+	var downwardPath = []string{}
+	// remove the prefix from the pieces
+	for _, p := range dp {
+		downwardPath = append(downwardPath, util.StripModulePrefix(p))
+	}
+
+	for _, k := range downwardPath {
+		// and then descending to the leafref path
+		_curEntry, ok := curEntry.Dir[k]
+		if !ok {
+			return nil, fmt.Errorf("entry %s not found in %s", k, curEntry.Name)
+		}
+		curEntry = _curEntry
+	}
+
+	return curEntry, nil
 }

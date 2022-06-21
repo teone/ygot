@@ -240,41 +240,20 @@ func buildListKey(e *yang.Entry, langMapper LangMapper, opts IROptions) (*YangLi
 		if keyleaf.Type != nil {
 			switch keyleaf.Type.Kind {
 			case yang.Yleafref:
-				// In the case that the key leaf is a YANG leafref, then in OpenConfig
-				// this means that the key is a pointer to an element under 'config' or
-				// 'state' under the list itself. In the case that this is not an OpenConfig
-				// compliant schema, then it may be a leafref to some other element in the
-				// schema. Therefore, when the key is a leafref for the OC case, then
-				// find the actual leaf that it points to, for other schemas, then ignore
-				// this lookup.
 				if opts.TransformationOptions.CompressBehaviour.CompressEnabled() {
 					// keyleaf.Type.Path specifies the (goyang validated) path to the
 					// leaf that is the target of the reference when the keyleaf is a
 					// leafref.
-					refparts := strings.Split(keyleaf.Type.Path, "/")
-					if len(refparts) < 2 {
-						return nil, []error{fmt.Errorf("key %s had an invalid path %s", k, keyleaf.Path())}
-					}
-					// In the case of OpenConfig, the list key is specified to be under
-					// the 'config' or 'state' container of the list element (e). To this
-					// end, we extract the name of the config/state container. However, in
-					// some cases, it can be prefixed, so we need to remove the prefixes
-					// from the path.
-					dir := util.StripModulePrefix(refparts[len(refparts)-2])
-					d, ok := e.Dir[dir]
-					if !ok {
+
+					// we use that path to iterate over the yang tree and find the correct leaf
+					_keyleaf, err := findLeafRef(keyleaf)
+					if err != nil {
 						return nil, []error{
-							fmt.Errorf("key %s had a leafref key (%s) in dir %s that did not exist (%v)",
-								k, keyleaf.Path(), dir, refparts),
+							fmt.Errorf("key %s had leafref key (%s) that did not exist at (%v)", k, keyleaf.Path(), keyleaf.Type.Path),
+							err,
 						}
 					}
-					targetLeaf := util.StripModulePrefix(refparts[len(refparts)-1])
-					if _, ok := d.Dir[targetLeaf]; !ok {
-						return nil, []error{
-							fmt.Errorf("key %s had leafref key (%s) that did not exist at (%v)", k, keyleaf.Path(), refparts),
-						}
-					}
-					keyleaf = d.Dir[targetLeaf]
+					keyleaf = _keyleaf
 				}
 			}
 		}

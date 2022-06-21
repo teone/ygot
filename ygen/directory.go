@@ -195,11 +195,13 @@ func getOrderedDirDetails(langMapper LangMapper, directory map[string]*Directory
 
 			mp, mm, err := findMapPaths(dir, fn, opts.TransformationOptions.CompressBehaviour.CompressEnabled(), false, opts.AbsoluteMapPaths)
 			if err != nil {
+				fmt.Println("TEO 1")
 				return nil, err
 			}
 
 			smp, smm, err := findMapPaths(dir, fn, opts.TransformationOptions.CompressBehaviour.CompressEnabled(), true, opts.AbsoluteMapPaths)
 			if err != nil {
+				fmt.Println("TEO 2")
 				return nil, err
 			}
 
@@ -356,6 +358,7 @@ func findSchemaPath(parent *Directory, fieldName string, shadowSchemaPaths, abso
 // The first returned path is the path of the direct child, followed by the key
 // leafref path, if any.
 func findMapPaths(parent *Directory, fieldName string, compressPaths, shadowSchemaPaths, absolutePaths bool) ([][]string, [][]string, error) {
+	fmt.Println(fmt.Sprintf("Dir: %s, fieldName: %s", parent.Name, fieldName))
 	childPath, childModulePath, err := findSchemaPath(parent, fieldName, shadowSchemaPaths, absolutePaths)
 	if err != nil {
 		return nil, nil, err
@@ -397,8 +400,13 @@ func findMapPaths(parent *Directory, fieldName string, compressPaths, shadowSche
 		// isKey to true so that the struct field can be mapped to the
 		// leafref leaf within the schema as well as the target of the
 		// leafref.
-		if k.Parent == nil || k.Parent.Parent == nil || k.Parent.Parent.Dir[k.Name] == nil || k.Parent.Parent.Dir[k.Name].Type == nil {
-			return nil, nil, fmt.Errorf("invalid compressed schema, could not find the key %s or the grandparent of %s", k.Name, k.Path())
+		//if k.Parent == nil || k.Parent.Parent == nil || k.Parent.Parent.Dir[k.Name] == nil || k.Parent.Parent.Dir[k.Name].Type == nil {
+		//	return nil, nil, fmt.Errorf("invalid compressed schema, could not find the key %s or the grandparent of %s", k.Name, k.Path())
+		//}
+		if k.Type.Kind == yang.Yleafref {
+			if _, err := findLeafRef(k); err != nil {
+				return nil, nil, fmt.Errorf("invalid compressed schema, could not find leaf that matches leafref")
+			}
 		}
 
 		// If a key of the list is a leafref that points to the field,
@@ -406,7 +414,7 @@ func findMapPaths(parent *Directory, fieldName string, compressPaths, shadowSche
 		// Note: if k is a leafref, buildListKey() would have already
 		// resolved it the field that the leafref points to. So, we
 		// compare their absolute paths for equality.
-		if k.Parent.Parent.Dir[k.Name].Type.Kind == yang.Yleafref && reflect.DeepEqual(util.SchemaPathNoChoiceCase(k), fieldSlicePath) {
+		if k.Type.Kind == yang.Yleafref && reflect.DeepEqual(util.SchemaPathNoChoiceCase(k), fieldSlicePath) {
 			// The path of the key element is simply the name of the leaf under the
 			// list, since the YANG specification enforces that keys are direct
 			// children of the list.

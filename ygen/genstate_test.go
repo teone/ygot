@@ -1568,9 +1568,22 @@ func (s *BuildListKeyMapper) PackageName(*yang.Entry, genutil.CompressBehaviour,
 	return "", nil
 }
 
+// this method is used to automatically add the entry.Parent to
+// all entries in a Dir
+func parentify(root *yang.Entry) *yang.Entry {
+
+	parent := root
+	for _, e := range root.Dir {
+		e.Parent = parent
+		parentify(e)
+	}
+	return root
+}
+
 // TestBuildListKey takes an input yang.Entry and ensures that the correct YangListAttr
 // struct is returned representing the keys of the list e.
 func TestBuildListKey(t *testing.T) {
+
 	tests := []struct {
 		name                    string        // name is the test identifier.
 		in                      *yang.Entry   // in is the yang.Entry of the test list.
@@ -2156,7 +2169,8 @@ func TestBuildListKey(t *testing.T) {
 				compressBehaviour = genutil.PreferIntendedConfig
 			}
 
-			got, err := buildListKey(tt.in, s, IROptions{
+			entry := parentify(tt.in)
+			got, err := buildListKey(entry, s, IROptions{
 				ParseOptions: ParseOpts{},
 				TransformationOptions: TransformationOpts{
 					CompressBehaviour:                    compressBehaviour,
